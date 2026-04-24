@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: ai-agent
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── AWS credentials ──────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # ── Build & push imagen Docker a ECR ────────────────────────────────
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag & push image
+        id: build
+        env:
+          REGISTRY:   ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG:  ${{ github.sha }}
+        run: |
+          IMAGE=$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker build -t $IMAGE .
+          docker push $IMAGE
+          # También taggear como latest
+          docker tag $IMAGE $REGISTRY/$ECR_REPOSITORY:latest
+          docker push $REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+      # ── Terraform ────────────────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra/terraform
+        run: terraform plan -var="image_tag=${{ github.sha }}"
+
+      - name: Terraform Apply
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve -var="image_tag=${{ github.sha }}"

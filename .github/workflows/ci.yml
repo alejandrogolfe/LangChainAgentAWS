@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check imports
+        run: python -c "from agent.graph import create_agent; print('OK')"
+        env:
+          OPENAI_API_KEY: "sk-dummy"
+          LANGCHAIN_API_KEY: "ls-dummy"
+          LANGCHAIN_TRACING_V2: "false"
+
+      - name: Build Docker image
+        run: docker build -t ai-agent:test .
