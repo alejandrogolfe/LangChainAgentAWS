@@ -4,22 +4,21 @@
 
 ---
 
+## Architecture
+
+![Architecture](docs/architecture.png)
+
+---
+
 ## What this project demonstrates
 
 - Building a **ReAct agent** with LangGraph and OpenAI GPT-4o-mini
 - Serving it through a **Streamlit chat interface**
 - **Containerising** the app with Docker
 - **Provisioning AWS infrastructure** (ECR, ECS Fargate, IAM, CloudWatch) with Terraform
-- **Automating deployments** with GitHub Actions — every push to `main` builds, pushes, and redeploys
+- **Automating deployments** with GitHub Actions — every push to `main` builds, pushes and redeploys
 - **Storing secrets securely** in AWS Secrets Manager (never in code or environment files)
-- **Observing agent behaviour** end-to-end in LangSmith
-
----
-
-## Architecture
-
-![Architecture](docs/architecture.png)
-
+- **Observing agent behaviour** end-to-end in LangSmith (EU region)
 
 ---
 
@@ -57,10 +56,9 @@
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml             # Runs on every push — import check + Docker build
-│       └── deploy.yml         # Runs on push to main — build, push ECR, terraform apply
+│       └── deploy.yml         # Runs on push to main — build, push ECR, force redeploy
 ├── Dockerfile
-├── requirements.txt
-└── run_local.sh               # Local development helper
+└── requirements.txt
 ```
 
 ---
@@ -77,16 +75,12 @@ Push to any branch
 Push to main
     └── deploy.yml
             ├── Configure AWS credentials (from GitHub Secrets)
-            ├── Build Docker image
-            ├── Tag with git SHA + latest
-            ├── Push to ECR
-            ├── terraform init
-            ├── terraform plan
-            └── terraform apply -var="image_tag=<sha>"
-                    └── ECS service force-deploys new task
+            ├── Build Docker image tagged with git SHA
+            ├── Push to ECR (tagged as SHA + latest)
+            └── Force ECS redeploy → picks up new image automatically
 ```
 
-Each deploy is **fully reproducible** — the image tag is the git commit SHA, so you can always trace which code is running in production.
+Each deploy is fully reproducible — the image tag is the git commit SHA, so you can always trace which code is running in production.
 
 ---
 
@@ -101,7 +95,20 @@ openai-api-key       ──────► secrets[].valueFrom  ─────�
 langchain-api-key    ──────► secrets[].valueFrom  ──────► LANGCHAIN_API_KEY
 ```
 
-Terraform references the secrets by name and grants the ECS execution role permission to read them. The application reads them as standard environment variables — it has no knowledge of where they came from.
+Terraform references the secrets by name and grants the ECS execution role permission to read them. The application reads them as standard environment variables.
+
+---
+
+## Infrastructure
+
+Infrastructure is managed with Terraform and deployed manually from local when changes are needed. GitHub Actions handles code deployments only.
+
+```
+Infra changes  →  terraform apply (local)
+Code changes   →  git push main  →  GitHub Actions deploys automatically
+```
+
+> In a production team setup this would use an S3 backend for shared Terraform state and run `terraform apply` from CI/CD as well.
 
 ---
 
@@ -145,16 +152,21 @@ Any push to `main` triggers the full pipeline automatically.
 ```bash
 pip install -r requirements.txt
 
-# Fill in your keys in run_local.sh, then:
-./run_local.sh
-# → http://localhost:8501
+# Create a .env file with your keys
+OPENAI_API_KEY=sk-...
+LANGCHAIN_API_KEY=ls__...
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://eu.api.smith.langchain.com
+LANGCHAIN_PROJECT=ai-agent
+
+streamlit run app/streamlit_app.py
 ```
 
 ---
 
 ## Agent tools
 
-The agent ships with two demo tools. Swap them out for real integrations (Tavily, SQL, APIs):
+The agent ships with two demo tools. Swap them out for real integrations:
 
 | Tool | Description |
 |---|---|
@@ -173,3 +185,13 @@ Every agent run is traced to **LangSmith** automatically. Set `LANGCHAIN_TRACING
 - Tool call inputs and outputs
 
 Traces are sent to the **EU region** (`https://eu.api.smith.langchain.com`).
+
+---
+
+## Future improvements
+
+- S3 backend for shared Terraform state across environments
+- `terraform apply` from CI/CD pipeline
+- ALB + Route53 for a stable URL (currently IP changes on each redeploy)
+- Canary deployments with AWS CodeDeploy
+- Auto-scaling ECS tasks based on load
