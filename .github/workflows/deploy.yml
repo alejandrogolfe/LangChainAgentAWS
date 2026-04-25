@@ -42,20 +42,10 @@ jobs:
           docker push $REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
-      # ── Terraform ────────────────────────────────────────────────────────
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.7.0"
-
-      - name: Terraform Init
-        working-directory: infra/terraform
-        run: terraform init
-
-      - name: Terraform Plan
-        working-directory: infra/terraform
-        run: terraform plan -var="image_tag=${{ github.sha }}"
-
-      - name: Terraform Apply
-        working-directory: infra/terraform
-        run: terraform apply -auto-approve -var="image_tag=${{ github.sha }}"
+      # ── Forzar redespliegue en ECS con la nueva imagen ──────────────────
+      - name: Force ECS redeploy
+        run: |
+          aws ecs update-service \
+            --cluster ai-agent-cluster \
+            --service ai-agent-service \
+            --force-new-deployment
