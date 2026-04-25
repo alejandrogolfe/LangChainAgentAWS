@@ -145,6 +145,33 @@ terraform apply
 
 ### 4. Deploy
 
+### 5. Access the app
+
+After the pipeline finishes, find the public IP of the running ECS task:
+
+**AWS Console → ECS → Clusters → ai-agent-cluster → Tasks → click on the running task → Networking → Public IP**
+
+Or via CLI:
+
+```bash
+# Get the task ARN
+aws ecs list-tasks --cluster ai-agent-cluster --service-name ai-agent-service
+
+# Get the ENI ID from the task
+aws ecs describe-tasks --cluster ai-agent-cluster --tasks <task-arn> --query "tasks[0].attachments[0].details" --output table
+
+# Get the public IP from the ENI
+aws ec2 describe-network-interfaces --network-interface-ids <eni-id> --query "NetworkInterfaces[0].Association.PublicIp" --output text
+```
+
+Then open your browser at:
+
+```
+http://<public-ip>:8501
+```
+
+> **Note:** The public IP changes every time ECS redeploys the task (on every `git push main`). This is a trade-off of not using a Load Balancer. For a stable URL you would add an ALB + Route53 (see Future improvements).
+
 Any push to `main` triggers the full pipeline automatically.
 
 ### Local development
