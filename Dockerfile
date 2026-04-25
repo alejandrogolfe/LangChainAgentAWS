@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+ENV PYTHONPATH=/app
+
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
